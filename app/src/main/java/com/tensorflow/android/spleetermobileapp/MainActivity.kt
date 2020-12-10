@@ -73,26 +73,61 @@ class MainActivity : AppCompatActivity() {
         val probabilityDataType: DataType =
             tflite.getOutputTensor(probabilityTensorIndex).dataType()
 
-        var byteBuffer : ByteBuffer = ByteBuffer.allocate(4*stftValues.size*stftValues[0].size)
 
         for(i in 0 until stftValues.size){
+            val valArray: Array<Array<Array<Float?>>> = stftValues[i]
+            var byteBuffer : ByteBuffer = ByteBuffer.allocate(4*valArray.size*valArray[0].size*valArray[0][0].size)
+            for (j in 0 until valArray.size){
+                val valFloatArray: FloatArray = genFloatArray(valArray[j])
+                val inpShapeDim: IntArray = intArrayOf(1,1,valArray[0].size,2)
+                val valInTnsrBuffer: TensorBuffer = TensorBuffer.createDynamic(imageDataType)
+                valInTnsrBuffer.loadArray(valFloatArray, inpShapeDim)
+                val valInBuffer : ByteBuffer = valInTnsrBuffer.getBuffer()
+                byteBuffer.put(valInBuffer)
+            }
+            byteBuffer.rewind()
+            //val inpBuffer: ByteBuffer? = convertBitmapToByteBuffer(bitmp)
+            val outputTensorBuffer: TensorBuffer =
+                TensorBuffer.createFixedSize(probabilityShape, probabilityDataType)
+            //run the predictions with input and output buffer tensors to get probability values across the labels
+            tflite.run(byteBuffer, outputTensorBuffer.getBuffer())
+            print(1000)
+        }
+
+       /* for(i in 0 until stftValues.size){
             val valArray: Array<Array<Array<Float?>>> = stftValues[i]
             val inpShapeDim: IntArray = intArrayOf(1,1,stftValues[0].size,1)
             val valInTnsrBuffer: TensorBuffer = TensorBuffer.createDynamic(imageDataType)
             valInTnsrBuffer.loadArray(valArray, inpShapeDim)
             val valInBuffer : ByteBuffer = valInTnsrBuffer.getBuffer()
             byteBuffer.put(valInBuffer)
+
         }
 
-        byteBuffer.rewind()
+        */
 
-        //val inpBuffer: ByteBuffer? = convertBitmapToByteBuffer(bitmp)
-        val outputTensorBuffer: TensorBuffer =
-            TensorBuffer.createFixedSize(probabilityShape, probabilityDataType)
-        //run the predictions with input and output buffer tensors to get probability values across the labels
-        tflite.run(byteBuffer, outputTensorBuffer.getBuffer())
+
+
+
 
         print(10000)
+    }
+
+    private fun genFloatArray(valInpArray:Array<Array<Float?>>): FloatArray{
+        val arrIndex1 = valInpArray.size
+        val arrIndex2 = valInpArray[0].size
+
+        val floatArraySize = arrIndex1 * arrIndex2
+
+        val valFloatArray : FloatArray = FloatArray(floatArraySize)
+
+        for (i in 0 until arrIndex1){
+            for(j in 0 until arrIndex2){
+                    val arrIndexVal = (i * arrIndex2) + j
+                    valFloatArray[arrIndexVal] = valInpArray[i][j]!!
+            }
+        }
+        return valFloatArray
     }
 
     private fun _stft(stereoMatrix: Array<FloatArray>): Array<Array<Array<Array<Float?>>>> {
