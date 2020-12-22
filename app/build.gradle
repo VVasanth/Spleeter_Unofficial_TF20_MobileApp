@@ -47,7 +47,7 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
     implementation 'org.tensorflow:tensorflow-lite:0.0.0-nightly'
     implementation('org.tensorflow:tensorflow-lite-support:0.0.0-nightly') {changing = true}
-    implementation files('../libs/jlibrosa-1.0.4-SNAPSHOT-jar-with-dependencies.jar')
+    implementation files('../libs/jlibrosa-1.0.5-SNAPSHOT-jar-with-dependencies.jar')
     testImplementation 'junit:junit:4.12'
     implementation 'com.arthenica:mobile-ffmpeg-full:4.4'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
