@@ -36,7 +36,7 @@ class MainActivity : AppCompatActivity() {
         val defaultSampleRate = -1 //-1 value implies the method to use default sample rate
 
         val defaultAudioDuration =
-            2 //-1 value implies the method to process complete audio duration
+            5 //-1 value implies the method to process complete audio duration
 
 
         jLibrosa = JLibrosa()
@@ -44,15 +44,106 @@ class MainActivity : AppCompatActivity() {
         val stereoFeatureValues =
             jLibrosa!!.loadAndReadStereo(audioFilePath, defaultSampleRate, defaultAudioDuration)
 
-        val byteArray = convertFloatArrayToByteArray(stereoFeatureValues)
+
+        val stereoTransposeFeatValues: Array<FloatArray> =
+            transposeMatrix(stereoFeatureValues)
+
+        val stftValueList: ArrayList<Array<Array<Complex?>>> = _stft(stereoTransposeFeatValues)
+
+        val stftValues: Array<Array<Array<Array<Float?>>>> = processSTFTValues(stftValueList)
+
+        val modelNameList = arrayOf("vocals_model.tflite", "other_model.tflite")
+
+        var predictionOutputList : MutableList<MutableList<FloatArray>> = ArrayList()
+
+        val consInstValuesStereoList:MutableList<MutableList<MutableList<FloatArray>>> = ArrayList()
+
+        for(i in 0 until stftValues.size){
+            val valArray: Array<Array<Array<Float?>>> = stftValues[i]
+            var byteBuffer : ByteBuffer = ByteBuffer.allocate(4*valArray.size*valArray[0].size*valArray[0][0].size)
+            for (j in 0 until valArray.size){
+                val valFloatArray: FloatArray = genFloatArray(valArray[j])
+                val inpShapeDim: IntArray = intArrayOf(1,1,valArray[0].size,2)
+                val valInTnsrBuffer: TensorBuffer = TensorBuffer.createDynamic(DataType.FLOAT32)
+                valInTnsrBuffer.loadArray(valFloatArray, inpShapeDim)
+                val valInBuffer : ByteBuffer = valInTnsrBuffer.getBuffer()
+                byteBuffer.put(valInBuffer)
+            }
+            byteBuffer.rewind()
+
+            var predictionStemOutputList : MutableList<Array<Array<Array<FloatArray>>>> = ArrayList()
+
+            for(m in 0 until modelNameList.size) {
+                val matrixResultOutput =
+                    executePredictionsFromTFLiteModel(modelNameList[m], byteBuffer)
+                predictionStemOutputList.add(matrixResultOutput)
+            }
+            val maskedResult:MutableList<Array<Array<Array<Complex>>>> = maskOutput(predictionStemOutputList, stftValueList)
+            val insValuesStereoList:MutableList<MutableList<FloatArray>> = extractISTFT(maskedResult)
+
+            consInstValuesStereoList.add(insValuesStereoList)
+/*
+
+            val magValues = magValuesInstrumentList[0]
+            val byte : ByteArray = ByteBuffer.allocate(4).putFloat(magValues[0]).array();
+
+            for(m in 0 until magValuesInstrumentList.size){
+                val magValues = magValuesInstrumentList[m]
+                saveMP3FromMagValues(magValues)
+            }
+
+
+ */
+            /*Runtime.getRuntime().
+                .exec(arrayOf(magValuesInstrumentList[0] > $pipe1"))
+            predictionOutputList.add(magValuesInstrumentList)*/
+            print(1000)
+        }
+
+        val procInstValuesStereoList:MutableList<MutableList<FloatArray>> = processConsolidatedInstValuesList(consInstValuesStereoList)
+
+        for(p in 0 until procInstValuesStereoList.size){
+            saveMP3FromMagValues(procInstValuesStereoList[p],p)
+        }
+
+        print(10000)
+    }
+
+
+    private fun processConsolidatedInstValuesList(consInstValuesList: MutableList<MutableList<MutableList<FloatArray>>>):MutableList<MutableList<FloatArray>>{
+
+        val segmentSize = consInstValuesList.size
+        val instrumentSize = consInstValuesList[0].size
+        val channelSize = consInstValuesList[0][0].size
+        val magSize = consInstValuesList[0][0][0].size
+
+        val procConsInstValuesList: MutableList<MutableList<FloatArray>> = ArrayList()
+
+        for(j in 0 until instrumentSize){
+            val channelValuesList: MutableList<FloatArray> = ArrayList()
+            for(k in 0 until channelSize){
+                val procFloatArrayList:ArrayList<Float> = ArrayList()
+                for(l in 0 until magSize){
+                    for (i in 0 until segmentSize){
+                            procFloatArrayList.add(consInstValuesList[i][j][k][l])
+                        }
+                }
+                channelValuesList.add(procFloatArrayList.toFloatArray())
+            }
+            procConsInstValuesList.add(channelValuesList)
+        }
+
+        return procConsInstValuesList
+    }
+
+
+    private fun saveMP3FromMagValues(instrumentMagValues:MutableList<FloatArray>, fileSuffix:Int) {
+
+        val byteArray = convertFloatArrayToByteArray(instrumentMagValues)
 
         val externalStorage_1: File = Environment.getExternalStorageDirectory()
 
-        val audioFilePath_1 = externalStorage_1.absolutePath + "/images/AClassicEducation.wav";
-
-        val outputPath_1 = externalStorage_1.absolutePath + "/images/output_2212b.mp3"
-
-        val sampleOutputFile1 = externalStorage_1.absolutePath + "/images/bytes.txt"
+        val outputPath_1 = externalStorage_1.absolutePath + "/images/output_" + fileSuffix + ".mp3"
 
         val sampleOutputFile = externalStorage_1.absolutePath + "/images/bytes_j.txt"
 
@@ -79,80 +170,15 @@ class MainActivity : AppCompatActivity() {
         }
 
 
-
-        //cat 002_dog_barking.wav | ffmpeg -f wav -i pipe: -vn -ar 44100 -ac 2 -b:a 192k output1.mp3
-
-        //val ffmpegCommand =
-          //  "-y -f f32le -i " + pipe1 + " -vn -ar 44100 -ac 2 " + outputPath_1
-
-
         val ffmpegCommand = "-f f32le -ac 2 -ar 44100 -i " + pipe1 + " -b:a 128k -ar 44100 -strict -2 " + outputPath_1 + " -y"
 
-        //Runtime.getRuntime()
-          //  .exec(arrayOf("sh", "-c", "cat " + sampleOutputFile + " > " + pipe1))
-
-        val cmd : Process = Runtime.getRuntime().exec(arrayOf("sh", "-c", "cat " + sampleOutputFile + " > " + pipe1))
-
+        Runtime.getRuntime().exec(arrayOf("sh", "-c", "cat " + sampleOutputFile + " > " + pipe1))
 
         FFmpeg.execute(ffmpegCommand, " ");
 
-
-
-
-
-        val stereoTransposeFeatValues: Array<FloatArray> =
-            transposeMatrix(stereoFeatureValues)
-
-        val stftValueList: ArrayList<Array<Array<Complex?>>> = _stft(stereoTransposeFeatValues)
-
-        val stftValues: Array<Array<Array<Array<Float?>>>> = processSTFTValues(stftValueList)
-
-        val modelNameList = arrayOf("vocals_model.tflite", "other_model.tflite")
-
-        var predictionOutputList : MutableList<MutableList<FloatArray>> = ArrayList()
-
-        for(i in 0 until stftValues.size){
-            val valArray: Array<Array<Array<Float?>>> = stftValues[i]
-            var byteBuffer : ByteBuffer = ByteBuffer.allocate(4*valArray.size*valArray[0].size*valArray[0][0].size)
-            for (j in 0 until valArray.size){
-                val valFloatArray: FloatArray = genFloatArray(valArray[j])
-                val inpShapeDim: IntArray = intArrayOf(1,1,valArray[0].size,2)
-                val valInTnsrBuffer: TensorBuffer = TensorBuffer.createDynamic(DataType.FLOAT32)
-                valInTnsrBuffer.loadArray(valFloatArray, inpShapeDim)
-                val valInBuffer : ByteBuffer = valInTnsrBuffer.getBuffer()
-                byteBuffer.put(valInBuffer)
-            }
-            byteBuffer.rewind()
-
-            var predictionStemOutputList : MutableList<Array<Array<Array<FloatArray>>>> = ArrayList()
-
-            for(m in 0 until modelNameList.size) {
-                val matrixResultOutput =
-                    executePredictionsFromTFLiteModel(modelNameList[m], byteBuffer)
-                predictionStemOutputList.add(matrixResultOutput)
-            }
-            val maskedResult:MutableList<Array<Array<Array<Complex>>>> = maskOutput(predictionStemOutputList, stftValueList)
-            val magValuesInstrumentList:MutableList<FloatArray> = extractISTFT(maskedResult)
-
-
-
-            val magValues = magValuesInstrumentList[0]
-            val byte : ByteArray = ByteBuffer.allocate(4).putFloat(magValues[0]).array();
-
-            /*Runtime.getRuntime().
-                .exec(arrayOf(magValuesInstrumentList[0] > $pipe1"))
-            predictionOutputList.add(magValuesInstrumentList)*/
-            print(1000)
-        }
-
-
-
-        print(10000)
     }
 
-
-
-    private fun convertFloatArrayToByteArray(stereoArray: Array<FloatArray>): ByteArray? {
+    private fun convertFloatArrayToByteArray(stereoArray: MutableList<FloatArray>): ByteArray? {
 
         val array: FloatArray = stereoArray[0]
         val n_channels = 2
@@ -184,13 +210,14 @@ class MainActivity : AppCompatActivity() {
         return res
     }
 
-    private fun extractISTFT(maskedResultValueList: MutableList<Array<Array<Array<Complex>>>>): MutableList<FloatArray>{
+    private fun extractISTFT(maskedResultValueList: MutableList<Array<Array<Array<Complex>>>>): MutableList<MutableList<FloatArray>>{
 
 
-        val magValuesFloatArrayList: MutableList<FloatArray> = ArrayList()
+        val insValuesStereoArrayList: MutableList<MutableList<FloatArray>> = ArrayList()
 
         for(i in 0 until maskedResultValueList.size){
             val maskedResultValue: Array<Array<Array<Complex>>> = maskedResultValueList[i]
+            val magValuesFloatArrayList: MutableList<FloatArray> = ArrayList()
 
             for(p in 0 until maskedResultValue[0][0].size){
                 val maskedResultValInstrument:Array<Array<Complex>> = Array(
@@ -214,8 +241,9 @@ class MainActivity : AppCompatActivity() {
 
                 magValuesFloatArrayList.add(magValues)
             }
+            insValuesStereoArrayList.add(magValuesFloatArrayList)
         }
-        return magValuesFloatArrayList
+        return insValuesStereoArrayList
     }
 
     private fun executePredictionsFromTFLiteModel(modelName:String, inpByteBuffer: ByteBuffer): Array<Array<Array<FloatArray>>> {
