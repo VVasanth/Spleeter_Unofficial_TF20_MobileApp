@@ -1,20 +1,28 @@
 package com.tensorflow.android.spleetermobileapp
 
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.os.Environment
+import android.os.Process
+import android.text.TextUtils
+import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.Spinner
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.arthenica.mobileffmpeg.Config
 import com.arthenica.mobileffmpeg.FFmpeg
 import com.jlibrosa.audio.JLibrosa
+import com.tensorflow.android.R
+import kotlinx.android.synthetic.main.activity_main.*
 import org.apache.commons.math3.complex.Complex
 import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
 import org.tensorflow.lite.support.common.FileUtil
 import org.tensorflow.lite.support.common.TensorProcessor
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer
-import java.io.File
-import java.io.FileOutputStream
-import java.io.OutputStream
+import java.io.*
 import java.nio.ByteBuffer
 import java.nio.MappedByteBuffer
 import java.util.stream.IntStream
@@ -31,84 +39,149 @@ class MainActivity : AppCompatActivity() {
 
         val externalStorage: File = Environment.getExternalStorageDirectory()
 
-        val audioFilePath = externalStorage.absolutePath + "/images/AClassicEducation.wav";
+        //val audioFilePath_1 = externalStorage.absolutePath + "/images/AClassicEducation.wav";
 
-        val defaultSampleRate = -1 //-1 value implies the method to use default sample rate
+        val audioFilePath = externalStorage.absolutePath + "/audio-separator-input/";
 
-        val defaultAudioDuration =
-            5 //-1 value implies the method to process complete audio duration
-
-
-        jLibrosa = JLibrosa()
-
-        val stereoFeatureValues =
-            jLibrosa!!.loadAndReadStereo(audioFilePath, defaultSampleRate, defaultAudioDuration)
+        val fileNames: MutableList<String> = ArrayList()
 
 
-        val stereoTransposeFeatValues: Array<FloatArray> =
-            transposeMatrix(stereoFeatureValues)
+        File(audioFilePath).walk().forEach{
 
-        val stftValueList: ArrayList<Array<Array<Complex?>>> = _stft(stereoTransposeFeatValues)
-
-        val stftValues: Array<Array<Array<Array<Float?>>>> = processSTFTValues(stftValueList)
-
-        val modelNameList = arrayOf("vocals_model.tflite", "other_model.tflite")
-
-        var predictionOutputList : MutableList<MutableList<FloatArray>> = ArrayList()
-
-        val consInstValuesStereoList:MutableList<MutableList<MutableList<FloatArray>>> = ArrayList()
-
-        for(i in 0 until stftValues.size){
-            val valArray: Array<Array<Array<Float?>>> = stftValues[i]
-            var byteBuffer : ByteBuffer = ByteBuffer.allocate(4*valArray.size*valArray[0].size*valArray[0][0].size)
-            for (j in 0 until valArray.size){
-                val valFloatArray: FloatArray = genFloatArray(valArray[j])
-                val inpShapeDim: IntArray = intArrayOf(1,1,valArray[0].size,2)
-                val valInTnsrBuffer: TensorBuffer = TensorBuffer.createDynamic(DataType.FLOAT32)
-                valInTnsrBuffer.loadArray(valFloatArray, inpShapeDim)
-                val valInBuffer : ByteBuffer = valInTnsrBuffer.getBuffer()
-                byteBuffer.put(valInBuffer)
-            }
-            byteBuffer.rewind()
-
-            var predictionStemOutputList : MutableList<Array<Array<Array<FloatArray>>>> = ArrayList()
-
-            for(m in 0 until modelNameList.size) {
-                val matrixResultOutput =
-                    executePredictionsFromTFLiteModel(modelNameList[m], byteBuffer)
-                predictionStemOutputList.add(matrixResultOutput)
-            }
-            val maskedResult:MutableList<Array<Array<Array<Complex>>>> = maskOutput(predictionStemOutputList, stftValueList)
-            val insValuesStereoList:MutableList<MutableList<FloatArray>> = extractISTFT(maskedResult)
-
-            consInstValuesStereoList.add(insValuesStereoList)
-/*
-
-            val magValues = magValuesInstrumentList[0]
-            val byte : ByteArray = ByteBuffer.allocate(4).putFloat(magValues[0]).array();
-
-            for(m in 0 until magValuesInstrumentList.size){
-                val magValues = magValuesInstrumentList[m]
-                saveMP3FromMagValues(magValues)
+            if(it.absolutePath.endsWith(".wav")){
+                fileNames.add(it.name)
             }
 
-
- */
-            /*Runtime.getRuntime().
-                .exec(arrayOf(magValuesInstrumentList[0] > $pipe1"))
-            predictionOutputList.add(magValuesInstrumentList)*/
-            print(1000)
         }
 
-        val procInstValuesStereoList:MutableList<MutableList<FloatArray>> = processConsolidatedInstValuesList(consInstValuesStereoList)
+        // access the spinner
+        val spinner = findViewById<Spinner>(R.id.spinner)
+        if (spinner != null) {
+            val adapter = ArrayAdapter(this,
+                android.R.layout.simple_spinner_item, fileNames)
+            spinner.adapter = adapter
 
-        for(p in 0 until procInstValuesStereoList.size){
-            saveMP3FromMagValues(procInstValuesStereoList[p],p)
         }
+
+        process_button.setOnClickListener( View.OnClickListener {
+            val selFilePath = spinner.selectedItem.toString()
+            var audioFilePath = audioFilePath + '/' + selFilePath;
+            if ( !TextUtils.isEmpty( selFilePath ) ){
+                val intent = Intent(this, ListActivity::class.java)
+                startActivity(intent)
+                processAudioSeparation(audioFilePath, applicationContext)
+                Toast.makeText( this@MainActivity, "Audio file is being processed. Pls wait for ~minutes for the process to complete.", Toast.LENGTH_LONG).show();
+            }
+            else{
+                Toast.makeText( this@MainActivity, "Please select the file and click on the process button.", Toast.LENGTH_LONG).show();
+            }
+        })
+
+        view_button.setOnClickListener( View.OnClickListener {
+                val intent = Intent(this, ListActivity::class.java)
+                startActivity(intent)
+        })
 
         print(10000)
     }
 
+
+    private fun processAudioSeparation(audioFilePath: String, context: Context) {
+
+        val loadRunnable = Runnable {
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+
+            val defaultSampleRate = -1 //-1 value implies the method to use default sample rate
+
+            val defaultAudioDuration =
+                15 //-1 value implies the method to process complete audio duration
+
+            val audioFileFullName = audioFilePath.substringAfterLast("/")
+            val audioFileName = audioFileFullName.substringBeforeLast(".")
+
+            jLibrosa = JLibrosa()
+
+            val stereoFeatureValues =
+                jLibrosa!!.loadAndReadStereo(audioFilePath, defaultSampleRate, defaultAudioDuration)
+
+
+            val stereoTransposeFeatValues: Array<FloatArray> =
+                transposeMatrix(stereoFeatureValues)
+
+            val stftValueList: ArrayList<Array<Array<Complex?>>> = _stft(stereoTransposeFeatValues)
+
+            val stftValues: Array<Array<Array<Array<Float?>>>> = processSTFTValues(stftValueList)
+
+            val modelNameList = arrayOf("vocals_model.tflite")
+
+            var predictionOutputList : MutableList<MutableList<FloatArray>> = ArrayList()
+
+            val consInstValuesStereoList:MutableList<MutableList<MutableList<FloatArray>>> = ArrayList()
+
+            for(i in 0 until stftValues.size){
+                val valArray: Array<Array<Array<Float?>>> = stftValues[i]
+
+                /*
+                var byteBuffer : ByteBuffer = ByteBuffer.allocate(4*valArray.size*valArray[0].size*valArray[0][0].size)
+
+                for (j in 0 until valArray.size){
+                    val valFloatArray: FloatArray = genFloatArray(valArray[j])
+                    val inpShapeDim: IntArray = intArrayOf(1,1,valArray[0].size,2)
+                    val valInTnsrBuffer: TensorBuffer = TensorBuffer.createDynamic(DataType.FLOAT32)
+                    valInTnsrBuffer.loadArray(valFloatArray, inpShapeDim)
+                    val valInBuffer : ByteBuffer = valInTnsrBuffer.getBuffer()
+                    byteBuffer.put(valInBuffer)
+                }
+                byteBuffer.rewind()
+                 */
+
+                val inputInference =
+                    Array(
+                        1
+                    ) {
+                        Array(
+                            512
+                        ) { Array(1024) { FloatArray(2) } }
+                    }
+
+                for (i in 0 until 512) {
+                    for (j in 0 until 1024) {
+                        for (k in 0 until 2) {
+                            inputInference[0][i][j][k] =
+                                valArray[i][j][k]!!
+                        }
+                    }
+                }
+
+
+                var predictionStemOutputList : MutableList<Array<Array<Array<FloatArray>>>> = ArrayList()
+
+                for(m in 0 until modelNameList.size) {
+                    val matrixResultOutput =
+                        executePredictionsFromTFLiteModelAsArray(modelNameList[m], inputInference)
+                    predictionStemOutputList.add(matrixResultOutput)
+                }
+                val maskedResult:MutableList<Array<Array<Array<Complex>>>> = maskOutput(predictionStemOutputList, stftValueList)
+
+
+                val insValuesStereoList:MutableList<MutableList<FloatArray>> = extractISTFT(maskedResult)
+
+                consInstValuesStereoList.add(insValuesStereoList)
+            }
+
+            val procInstValuesStereoList:MutableList<MutableList<FloatArray>> = processConsolidatedInstValuesList(consInstValuesStereoList)
+
+            for(p in 0 until procInstValuesStereoList.size){
+                saveWavFromMagValues(procInstValuesStereoList[p],p,audioFileName)
+            }
+
+        }
+
+        val processThread = Thread(loadRunnable);
+        processThread.start();
+
+
+    }
 
     private fun processConsolidatedInstValuesList(consInstValuesList: MutableList<MutableList<MutableList<FloatArray>>>):MutableList<MutableList<FloatArray>>{
 
@@ -137,15 +210,17 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun saveMP3FromMagValues(instrumentMagValues:MutableList<FloatArray>, fileSuffix:Int) {
+    private fun saveWavFromMagValues(instrumentMagValues:MutableList<FloatArray>, fileSuffix:Int, audioInputFileName:String) {
 
         val byteArray = convertFloatArrayToByteArray(instrumentMagValues)
 
         val externalStorage_1: File = Environment.getExternalStorageDirectory()
 
-        val outputPath_1 = externalStorage_1.absolutePath + "/images/output_" + fileSuffix + ".mp3"
+        val audioFileName: String = audioInputFileName + "_vocal"
 
-        val sampleOutputFile = externalStorage_1.absolutePath + "/images/bytes_j.txt"
+        val outputPath_1 = externalStorage_1.absolutePath + "/audio-separator-output/" + audioFileName + ".wav"
+
+        val sampleOutputFile = externalStorage_1.absolutePath + "/audio-separator-output/bytes_j.txt"
 
         val pipe1: String = Config.registerNewFFmpegPipe(applicationContext)
 
@@ -168,7 +243,6 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             println("Exception: $e")
         }
-
 
         val ffmpegCommand = "-f f32le -ac 2 -ar 44100 -i " + pipe1 + " -b:a 128k -ar 44100 -strict -2 " + outputPath_1 + " -y"
 
@@ -210,6 +284,30 @@ class MainActivity : AppCompatActivity() {
         return res
     }
 
+    private fun writeArrayToFile(arr2DValue: Array<Array<Complex>>){
+        val builder = StringBuilder()
+        for (i in 0 until arr2DValue.size)  //for each row
+        {
+            for (j in 0 until arr2DValue[0].size)  //for each column
+            {
+                builder.append(arr2DValue.get(i).get(j).toString() + "") //append to the output string
+                if (j < arr2DValue[0].size - 1) //if this is not the last row element
+                    builder.append(",") //then add comma (if you don't like commas you can use spaces)
+            }
+            builder.append("\n") //append new line at the end of the row
+        }
+
+        val externalStorage_1: File = Environment.getExternalStorageDirectory()
+
+        val sampleOutputFile = externalStorage_1.absolutePath + "/images/twodarray.txt"
+
+        val writer =
+            BufferedWriter(FileWriter(sampleOutputFile))
+        writer.write(builder.toString()) //save the string representation of the board
+
+        writer.close()
+    }
+
     private fun extractISTFT(maskedResultValueList: MutableList<Array<Array<Array<Complex>>>>): MutableList<MutableList<FloatArray>>{
 
 
@@ -235,8 +333,10 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
+                //writeArrayToFile(maskedResultValInstrument)
+
                 val magValues:FloatArray = jLibrosa!!.generateInvSTFTFeatures(maskedResultValInstrument,
-                    jLibrosa!!.sampleRate, 40,4096, 128, 512)
+                    jLibrosa!!.sampleRate, 40,4096, 128, 1024)
 
 
                 magValuesFloatArrayList.add(magValues)
@@ -245,6 +345,56 @@ class MainActivity : AppCompatActivity() {
         }
         return insValuesStereoArrayList
     }
+
+
+    private fun executePredictionsFromTFLiteModelAsArray(modelName:String, inputInference: Array<Array<Array<FloatArray>>>): Array<Array<Array<FloatArray>>> {
+
+        val tflite: Interpreter
+
+        //load the TFLite model in 'MappedByteBuffer' format using TF Interpreter
+        val tfliteModel: MappedByteBuffer =  FileUtil.loadMappedFile(applicationContext, modelName)
+
+        /** Options for configuring the Interpreter.  */
+        val tfliteOptions =
+            Interpreter.Options()
+        tfliteOptions.setNumThreads(2)
+        tflite = Interpreter(tfliteModel, tfliteOptions)
+
+        //get the datatype and shape of the input tensor to be fed to tflite model
+        val imageTensorIndex = 0
+
+        val imageDataType: DataType = tflite.getInputTensor(imageTensorIndex).dataType()
+
+        val imageDataShape: IntArray = tflite.getInputTensor(imageTensorIndex).shape()
+
+        //get the datatype and shape of the output prediction tensor from tflite model
+        val probabilityTensorIndex = 0
+        val probabilityShape =
+            tflite.getOutputTensor(probabilityTensorIndex).shape()
+        val probabilityDataType: DataType =
+            tflite.getOutputTensor(probabilityTensorIndex).dataType()
+
+
+        val outputTensorBuffer: TensorBuffer =
+            TensorBuffer.createFixedSize(probabilityShape, probabilityDataType)
+
+        val outputInference =
+            Array(
+                1
+            ) {
+                Array(
+                    512
+                ) { Array(1024) { FloatArray(2) } }
+            }
+
+        //run the predictions with input and output buffer tensors to get probability values across the labels
+        tflite.run(inputInference, outputInference)
+
+        return outputInference
+    }
+
+
+
 
     private fun executePredictionsFromTFLiteModel(modelName:String, inpByteBuffer: ByteBuffer): Array<Array<Array<FloatArray>>> {
 
@@ -290,12 +440,14 @@ class MainActivity : AppCompatActivity() {
 
         val separationComponent: Int = 2
         val eps = 1e-10F
-        val lenStems = 2
+        val lenStems = 1 //2
 
         val pInd = matrixResultOutputList[0].size
         val qInd = matrixResultOutputList[0][0].size
         val rInd = matrixResultOutputList[0][0][0].size
         val sInd = matrixResultOutputList[0][0][0][0].size
+
+
 
 
         var outputSumMatrix: Array<Array<Array<FloatArray>>> =
@@ -342,7 +494,7 @@ class MainActivity : AppCompatActivity() {
                     for (k in 0 until rInd){
                         for (l in 0 until sInd){
                             var value = matrixResultOutputList[x][i][j][k][l]
-                            var procValue = ((value.pow(separationComponent)) + (eps/lenStems))/outputSumMatrix[i][j][k][l]
+                            var procValue = ((value.pow(separationComponent)) + (eps/lenStems)) /// outputSumMatrix[i][j][k][l]
                             procPredMatrix[i][j][k][l] = procValue
                         }
                     }
@@ -471,7 +623,7 @@ class MainActivity : AppCompatActivity() {
         for (i in 0 until stereoMatrix[0].size) {
             val doubleStream: FloatArray = getColumnFromMatrix(stereoMatrix, i)
             val stftComplexValues =
-                jLibrosa!!.generateSTFTFeatures(doubleStream, sampleRate, 40, 4096, 128, 1024)
+                jLibrosa!!.generateSTFTFeaturesWithPadOption(doubleStream, sampleRate, 40, 4096, 128, 1024, false)
             val transposedSTFTComplexValues: Array<Array<Complex?>> =
                 transposeMatrix(stftComplexValues)
             stftValuesList.add(transposedSTFTComplexValues)
@@ -479,25 +631,6 @@ class MainActivity : AppCompatActivity() {
         return stftValuesList
     }
 
-/*
-    private fun _istft(complexMaskedMatrix: ArrayList<Array<Array<Complex?>>> ) {
-        val N = 4096
-        val H = 1024
-        val sampleRate = 44100
-        val stftValuesList =
-            ArrayList<Array<Array<Complex?>>>()
-        for (i in 0 until complexMaskedMatrix[0].size) {
-            val doubleStream: FloatArray = getColumnFromMatrix(stereoMatrix, i)
-            val stftComplexValues =
-                jLibrosa!!.generateSTFTFeatures(doubleStream, sampleRate, 40, 4096, 128, 1024)
-            val transposedSTFTComplexValues: Array<Array<Complex?>> =
-                transposeMatrix(stftComplexValues)
-            stftValuesList.add(transposedSTFTComplexValues)
-        }
-        return stftValuesList
-    }
-
-    */
 
     private fun processSTFTValues(stftValuesList: ArrayList<Array<Array<Complex?>>>): Array<Array<Array<Array<Float?>>>> {
         val segmentLen = 512
