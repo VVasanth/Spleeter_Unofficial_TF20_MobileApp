@@ -47,10 +47,25 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:1.1.3'
     implementation 'org.tensorflow:tensorflow-lite:0.0.0-nightly'
     implementation('org.tensorflow:tensorflow-lite-support:0.0.0-nightly') {changing = true}
-    implementation files('../libs/jlibrosa-1.0.5-SNAPSHOT-jar-with-dependencies.jar')
+    implementation 'androidx.recyclerview:recyclerview:1.1.0'
+    implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.3.0'
+    implementation 'androidx.wear:wear:1.0.0'
+    implementation files('../libs/jlibrosa-1.1.52-SNAPSHOT-jar-with-dependencies.jar')
     testImplementation 'junit:junit:4.12'
-    implementation 'com.arthenica:mobile-ffmpeg-full:4.4'
+    implementation 'com.arthenica:mobile-ffmpeg-full:4.3'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.2.0'
+    //Groupie
+    implementation 'com.xwray:groupie:2.1.0'
+    implementation 'com.xwray:groupie-kotlin-android-extensions:2.1.0'
+    implementation 'com.android.support:design:28.0.0'
+    implementation 'com.android.support:support-v4:28.0.0'
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation "com.google.android.material:material:1.0.0"
+    implementation "androidx.recyclerview:recyclerview:1.0.0"
+    implementation "androidx.cardview:cardview:1.0.0"
+    compileOnly 'com.google.android.wearable:wearable:2.6.0'
 
 }
