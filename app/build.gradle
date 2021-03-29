@@ -51,7 +51,7 @@ dependencies {
     implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.3.0'
     implementation 'androidx.wear:wear:1.0.0'
-    implementation files('../libs/jlibrosa-1.1.52-SNAPSHOT-jar-with-dependencies.jar')
+    implementation files('../libs/jlibrosa-1.1.7-SNAPSHOT-jar-with-dependencies.jar')
     testImplementation 'junit:junit:4.12'
     implementation 'com.arthenica:mobile-ffmpeg-full:4.3'
     androidTestImplementation 'androidx.test.ext:junit:1.1.1'

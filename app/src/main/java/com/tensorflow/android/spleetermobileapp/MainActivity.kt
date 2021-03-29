@@ -89,7 +89,7 @@ class MainActivity : AppCompatActivity() {
             val defaultSampleRate = -1 //-1 value implies the method to use default sample rate
 
             val defaultAudioDuration =
-                10 //-1 value implies the method to process complete audio duration
+                20 //-1 value implies the method to process complete audio duration
 
             val audioFileFullName = audioFilePath.substringAfterLast("/")
             val audioFileName = audioFileFullName.substringBeforeLast(".")
@@ -194,7 +194,7 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun saveWavFromMagValues(instrumentMagValues:MutableList<FloatArray>, fileSuffix:Int, audioInputFileName:String) {
+    private fun saveWavFromMagValues(instrumentMagValues:MutableList<FloatArray>, fileSuffix:Int, audioInputFileName:String ) {
 
         val byteArray = convertFloatArrayToByteArray(instrumentMagValues)
 
@@ -230,6 +230,7 @@ class MainActivity : AppCompatActivity() {
 
         val ffmpegCommand = "-f f32le -ac 2 -ar 44100 -i " + pipe1 + " -b:a 128k -ar 44100 -strict -2 " + outputPath_1 + " -y"
 
+       // val ffmpegCommand = "-f f32le -ac 2 -ar 22500 -i " + pipe1 + " -b:a 128k -ar 22500 -strict -2 " + outputPath_1 + " -y"
         Runtime.getRuntime().exec(arrayOf("sh", "-c", "cat " + sampleOutputFile + " > " + pipe1))
 
         FFmpeg.execute(ffmpegCommand, " ");
@@ -308,7 +309,7 @@ class MainActivity : AppCompatActivity() {
         val normalizedMagValues = deNormalizeStereoFeatureValues(magValues)
         val mutableMagList: MutableList<FloatArray> = ArrayList()
 
-        mutableMagList.add(normalizedMagValues)
+        mutableMagList.add(magValues)
         saveWavFromMagValues(mutableMagList, 0, "denoised_output")
         print(1)
     }
@@ -369,8 +370,8 @@ class MainActivity : AppCompatActivity() {
 
        // writeArrayToFile(squeezedFeatureValue)
 
-        val magValues:FloatArray = jLibrosa!!.generateInvSTFTFeatures(squeezedFeatureValue,
-            44100, 40,256, 128, 64)
+        val magValues:FloatArray = jLibrosa!!.generateInvSTFTFeaturesWithPadOption(squeezedFeatureValue,
+            44100, 40,256, 128, 64, -1, true)
 
         return magValues
     }
