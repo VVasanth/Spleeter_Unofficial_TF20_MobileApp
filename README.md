@@ -2,6 +2,24 @@
 Mobile app that consumes the TFLite version of Spleeter_TF2.0_Unofficial version and performs the audio source separation on the edge.
 
 *********************************************************************
+Update - Mar 29, 2020
+
+As mentioned below, this mobile app helps in the generation of audio files but with considerable noises. I am working on adding a denoiser to reduce the noises. Please click on the following
+soundcloud links to hear the quality of audio files:
+
+1. Input Audio
+
+https://soundcloud.com/vasanth-velayudham/aclassiceducation
+
+2. Vocal extract from mobile app
+
+https://soundcloud.com/vasanth-velayudham/aclassiceducation-vocal-extract
+
+3. Denoised Vocal extract from mobile app [This is in progress and the code will be committed soon]
+
+https://soundcloud.com/vasanth-velayudham/aclassiceducation-vocal-denoised
+
+*********************************************************************
 Update - Mar 23, 2020
 
 Committed the mobile app that uses the TFLite model of SpleeterTF2.0_Unofficial project and generates the vocal version of the given input.
